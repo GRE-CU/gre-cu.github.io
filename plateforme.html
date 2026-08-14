@@ -164,13 +164,28 @@
     position:absolute; top:18px; right:18px; background:var(--gold); color:var(--navy-deep);
     font-size:0.75rem; font-weight:700; padding:3px 10px; border-radius:999px;
   }
+  .examen-badge{
+    position:absolute; top:18px; left:18px; background:var(--teal); color:white;
+    font-size:0.7rem; font-weight:700; padding:3px 10px; border-radius:999px;
+  }
+
+  /* ===== FILTRES ===== */
+  .filtres{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; justify-content:center;}
+  .filtre-groupe{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-right:14px;}
+  .filtre-label{font-size:0.78rem; font-weight:700; color:#8a8f98; text-transform:uppercase; letter-spacing:0.03em; margin-right:4px;}
+  .puce-filtre{
+    padding:6px 14px; border-radius:999px; border:1.5px solid var(--line); background:var(--paper);
+    font-size:0.85rem; font-weight:600; color:var(--navy); cursor:pointer; transition:all .15s;
+  }
+  .puce-filtre.actif{background:var(--navy); color:var(--cream); border-color:var(--navy);}
+  .puce-filtre.actif.examen{background:var(--teal); border-color:var(--teal);}
   .tampon-activite{
     width:64px;height:64px; margin:0 auto 16px; border-radius:50%;
     border:2.5px dashed var(--teal); display:flex; align-items:center; justify-content:center;
     color:var(--teal); font-size:1.6rem;
   }
   .tampon-activite.fait{border-color:var(--gold); color:var(--gold); transform:rotate(-8deg);}
-  .carte-activite h3{font-size:1.15rem; color:var(--navy); margin-bottom:20px; min-height:44px;}
+  .carte-activite h3{font-size:1.15rem; color:var(--navy); margin-bottom:20px; margin-top:8px; min-height:44px;}
   .actions-carte{display:flex; flex-direction:column; gap:10px;}
   .btn-ouvrir{
     background:var(--navy); color:var(--cream); border:none; padding:11px; border-radius:10px;
@@ -264,14 +279,24 @@
             </select>
           </div>
         </div>
+        <div class="champ"><label>Filière / Examen</label>
+          <select id="act-examen">
+            <option value="general">Cours général</option>
+            <option value="DELF">DELF</option>
+            <option value="DALF">DALF</option>
+            <option value="TEF">TEF</option>
+            <option value="TCF">TCF</option>
+          </select>
+        </div>
         <div class="champ"><label>Lien de l'activité (URL)</label><input type="url" id="act-url" placeholder="https://tonpseudo.github.io/repo/futur-proche.html"></div>
         <button class="btn-principal btn-secondaire" id="btn-creer-activite" style="max-width:280px; margin:10px auto 0; display:block;">Ajouter l'activité</button>
         <div class="msg-erreur" id="creer-activite-msg"></div>
       </div>
       <div class="bloc">
         <h2>Activités existantes</h2>
+        <div class="filtres" id="filtres-admin"></div>
         <table id="table-activites">
-          <thead><tr><th>Titre</th><th>Niveau</th><th></th></tr></thead>
+          <thead><tr><th>Titre</th><th>Niveau</th><th>Filière</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="vide hidden" id="activites-vide">Aucune activité pour le moment.</div>
@@ -297,6 +322,7 @@
       <h1 id="eleve-bonjour">Bonjour !</h1>
       <p>Voici tes activités. Ouvre-les et coche-les une fois terminées.</p>
     </div>
+    <div class="filtres" id="filtres-eleve"></div>
     <div class="grille-activites" id="grille-activites"></div>
     <div class="vide hidden" id="activites-eleve-vide">Ton professeur n'a pas encore ajouté d'activités.</div>
   </div>
@@ -479,6 +505,7 @@ async function chargerEleves(){
 $('btn-creer-activite').addEventListener('click', async () => {
   const titre = $('act-titre').value.trim();
   const niveau = $('act-niveau').value;
+  const examen = $('act-examen').value;
   const url = $('act-url').value.trim();
   const msg = $('creer-activite-msg');
   msg.textContent = '';
@@ -486,7 +513,7 @@ $('btn-creer-activite').addEventListener('click', async () => {
   if(!titre || !url){ msg.textContent = "Merci d'indiquer un titre et un lien."; return; }
   try{
     const ref = doc(collection(db, 'activities'));
-    await setDoc(ref, { title: titre, level: niveau, url, createdAt: serverTimestamp() });
+    await setDoc(ref, { title: titre, level: niveau, examType: examen, url, createdAt: serverTimestamp() });
     msg.className = 'msg-ok';
     msg.textContent = "Activité ajoutée.";
     $('act-titre').value=''; $('act-url').value='';
@@ -496,19 +523,70 @@ $('btn-creer-activite').addEventListener('click', async () => {
   }
 });
 
+let activitesCache = [];
+let filtreNiveauAdmin = null;
+let filtreExamenAdmin = null;
+
+function libelleExamen(v){
+  return v === 'general' || !v ? 'Cours général' : v;
+}
+
 async function chargerActivitesAdmin(){
   const snap = await getDocs(collection(db, 'activities'));
+  activitesCache = [];
+  snap.forEach(d => activitesCache.push({ id: d.id, ...d.data() }));
+  construireFiltresAdmin();
+  afficherTableActivites();
+}
+
+function construireFiltresAdmin(){
+  const niveaux = ['A1','A2','B1','B2','C1','C2'];
+  const examens = ['general','DELF','DALF','TEF','TCF'];
+  const cont = $('filtres-admin');
+  cont.innerHTML = '';
+
+  const groupeNiveau = document.createElement('div');
+  groupeNiveau.className = 'filtre-groupe';
+  groupeNiveau.innerHTML = `<span class="filtre-label">Niveau</span>`;
+  const puceTousN = creerPuce('Tous', !filtreNiveauAdmin, ()=>{ filtreNiveauAdmin=null; construireFiltresAdmin(); afficherTableActivites(); });
+  groupeNiveau.appendChild(puceTousN);
+  niveaux.forEach(n=>{
+    groupeNiveau.appendChild(creerPuce(n, filtreNiveauAdmin===n, ()=>{ filtreNiveauAdmin = (filtreNiveauAdmin===n?null:n); construireFiltresAdmin(); afficherTableActivites(); }));
+  });
+  cont.appendChild(groupeNiveau);
+
+  const groupeExamen = document.createElement('div');
+  groupeExamen.className = 'filtre-groupe';
+  groupeExamen.innerHTML = `<span class="filtre-label">Filière</span>`;
+  const puceTousE = creerPuce('Toutes', !filtreExamenAdmin, ()=>{ filtreExamenAdmin=null; construireFiltresAdmin(); afficherTableActivites(); }, true);
+  groupeExamen.appendChild(puceTousE);
+  examens.forEach(ex=>{
+    groupeExamen.appendChild(creerPuce(libelleExamen(ex), filtreExamenAdmin===ex, ()=>{ filtreExamenAdmin = (filtreExamenAdmin===ex?null:ex); construireFiltresAdmin(); afficherTableActivites(); }, true));
+  });
+  cont.appendChild(groupeExamen);
+}
+
+function creerPuce(texte, actif, onClick, estExamen){
+  const b = document.createElement('button');
+  b.className = 'puce-filtre' + (actif?' actif':'') + (estExamen?' examen':'');
+  b.textContent = texte;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function afficherTableActivites(){
   const tbody = document.querySelector('#table-activites tbody');
   tbody.innerHTML = '';
-  let n = 0;
-  snap.forEach(d => {
-    n++;
-    const a = d.data();
+  const filtrees = activitesCache.filter(a =>
+    (!filtreNiveauAdmin || a.level === filtreNiveauAdmin) &&
+    (!filtreExamenAdmin || (a.examType||'general') === filtreExamenAdmin)
+  );
+  filtrees.forEach(a => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td><button class="btn-mini" data-id="${d.id}">Supprimer</button></td>`;
+    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td>${libelleExamen(a.examType)}</td><td><button class="btn-mini" data-id="${a.id}">Supprimer</button></td>`;
     tbody.appendChild(tr);
   });
-  $('activites-vide').classList.toggle('hidden', n>0);
+  $('activites-vide').classList.toggle('hidden', filtrees.length>0);
   tbody.querySelectorAll('.btn-mini').forEach(b=>{
     b.addEventListener('click', async ()=>{
       if(confirm("Supprimer cette activité ?")){
@@ -552,38 +630,77 @@ async function chargerSuivi(){
 }
 
 // ===== ESPACE ÉLÈVE =====
+let activitesEleveCache = [];
+let termineEleveCache = new Set();
+let filtreNiveauEleve = null;
+let filtreExamenEleve = null;
+
 async function chargerActivitesEleve(){
   const [actSnap, progSnap] = await Promise.all([
     getDocs(collection(db,'activities')),
     getDocs(query(collection(db,'progress'), where('uid','==',profilActuel.uid)))
   ]);
-  const termine = new Set();
+  termineEleveCache = new Set();
   progSnap.forEach(d=>{
     const p = d.data();
-    if(p.status === 'termine') termine.add(p.activityId);
+    if(p.status === 'termine') termineEleveCache.add(p.activityId);
   });
+  activitesEleveCache = [];
+  actSnap.forEach(d=> activitesEleveCache.push({ id: d.id, ...d.data() }));
 
+  construireFiltresEleve();
+  afficherGrilleActivites();
+}
+
+function construireFiltresEleve(){
+  const niveaux = ['A1','A2','B1','B2','C1','C2'];
+  const examens = ['general','DELF','DALF','TEF','TCF'];
+  const cont = $('filtres-eleve');
+  cont.innerHTML = '';
+
+  const groupeNiveau = document.createElement('div');
+  groupeNiveau.className = 'filtre-groupe';
+  groupeNiveau.innerHTML = `<span class="filtre-label">Niveau</span>`;
+  groupeNiveau.appendChild(creerPuce('Tous', !filtreNiveauEleve, ()=>{ filtreNiveauEleve=null; construireFiltresEleve(); afficherGrilleActivites(); }));
+  niveaux.forEach(n=>{
+    groupeNiveau.appendChild(creerPuce(n, filtreNiveauEleve===n, ()=>{ filtreNiveauEleve = (filtreNiveauEleve===n?null:n); construireFiltresEleve(); afficherGrilleActivites(); }));
+  });
+  cont.appendChild(groupeNiveau);
+
+  const groupeExamen = document.createElement('div');
+  groupeExamen.className = 'filtre-groupe';
+  groupeExamen.innerHTML = `<span class="filtre-label">Filière</span>`;
+  groupeExamen.appendChild(creerPuce('Toutes', !filtreExamenEleve, ()=>{ filtreExamenEleve=null; construireFiltresEleve(); afficherGrilleActivites(); }, true));
+  examens.forEach(ex=>{
+    groupeExamen.appendChild(creerPuce(libelleExamen(ex), filtreExamenEleve===ex, ()=>{ filtreExamenEleve = (filtreExamenEleve===ex?null:ex); construireFiltresEleve(); afficherGrilleActivites(); }, true));
+  });
+  cont.appendChild(groupeExamen);
+}
+
+function afficherGrilleActivites(){
   const grille = $('grille-activites');
   grille.innerHTML = '';
-  let n = 0;
-  actSnap.forEach(d=>{
-    n++;
-    const a = d.data();
-    const estFait = termine.has(d.id);
+  const filtrees = activitesEleveCache.filter(a =>
+    (!filtreNiveauEleve || a.level === filtreNiveauEleve) &&
+    (!filtreExamenEleve || (a.examType||'general') === filtreExamenEleve)
+  );
+  filtrees.forEach(a=>{
+    const estFait = termineEleveCache.has(a.id);
     const carte = document.createElement('div');
     carte.className = 'carte-activite';
     carte.innerHTML = `
+      <div class="examen-badge">${libelleExamen(a.examType)}</div>
       <div class="niveau-badge">${a.level||''}</div>
       <div class="tampon-activite ${estFait?'fait':''}">${estFait?'✓':'FR'}</div>
       <h3>${a.title}</h3>
       <div class="actions-carte">
         <a class="btn-ouvrir" href="${a.url}" target="_blank" rel="noopener">Ouvrir l'activité</a>
-        <button class="btn-termine ${estFait?'actif':''}" data-id="${d.id}">${estFait?'Terminé ✓':'Marquer comme terminé'}</button>
+        <button class="btn-termine ${estFait?'actif':''}" data-id="${a.id}">${estFait?'Terminé ✓':'Marquer comme terminé'}</button>
       </div>
     `;
     grille.appendChild(carte);
   });
-  $('activites-eleve-vide').classList.toggle('hidden', n>0);
+  $('activites-eleve-vide').classList.toggle('hidden', filtrees.length>0);
 
   grille.querySelectorAll('.btn-termine').forEach(b=>{
     b.addEventListener('click', async ()=>{
