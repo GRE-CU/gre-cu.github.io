@@ -168,6 +168,22 @@
     position:absolute; top:18px; left:18px; background:var(--teal); color:white;
     font-size:0.7rem; font-weight:700; padding:3px 10px; border-radius:999px;
   }
+  .categorie-badge{
+    display:inline-block; margin-top:4px; background:var(--navy); color:var(--cream);
+    font-size:0.7rem; font-weight:700; padding:3px 10px; border-radius:999px;
+  }
+  .carte-activite.verrouillee{opacity:0.72; filter:grayscale(0.15);}
+  .carte-activite.verrouillee .tampon-activite{border-color:var(--coral); color:var(--coral);}
+  .cadenas-badge{
+    position:absolute; top:-10px; right:-10px; background:var(--coral); color:white;
+    width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:1.1rem; box-shadow:var(--shadow); border:2px solid var(--paper);
+  }
+  .btn-premium{
+    border:none; background:var(--coral); color:white; padding:10px 18px; border-radius:10px;
+    font-size:0.88rem; font-weight:600; cursor:pointer; font-family:'Work Sans',sans-serif;
+  }
+  .btn-premium:hover{opacity:0.88;}
 
   /* ===== FILTRES ===== */
   .filtres{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; justify-content:center;}
@@ -355,6 +371,13 @@
             </select>
           </div>
         </div>
+        <div class="champ"><label>Catégorie</label>
+          <select id="act-categorie">
+            <option value="grammaire">Grammaire</option>
+            <option value="vocabulaire">Vocabulaire</option>
+            <option value="general">Général</option>
+          </select>
+        </div>
         <div class="champ"><label>Filière / Examen</label>
           <select id="act-examen">
             <option value="general">Cours général</option>
@@ -382,7 +405,7 @@
         <h2>Activités existantes</h2>
         <div class="filtres" id="filtres-admin"></div>
         <table id="table-activites">
-          <thead><tr><th>Titre</th><th>Niveau</th><th>Filière</th><th>Accès</th><th></th></tr></thead>
+          <thead><tr><th>Titre</th><th>Niveau</th><th>Catégorie</th><th>Filière</th><th>Accès</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="vide hidden" id="activites-vide">Aucune activité pour le moment.</div>
@@ -435,6 +458,19 @@
     <button class="btn-logout" id="btn-fermer-visionneuse">✕ Fermer</button>
   </div>
   <iframe id="visionneuse-iframe" sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe>
+</div>
+
+<!-- ===================== MODALE PREMIUM ===================== -->
+<div class="modale-fond hidden" id="modale-premium">
+  <div class="modale-carte" style="max-width:420px; text-align:center;">
+    <div class="tampon" style="border-color:var(--coral); color:var(--coral);">🔒</div>
+    <h2 style="color:var(--navy); margin:14px 0 10px;">Contenu Premium</h2>
+    <p style="color:#6b7280; font-size:0.95rem; margin-bottom:8px;" id="premium-activite-nom"></p>
+    <p style="color:#6b7280; font-size:0.92rem; margin-bottom:22px;">Cette activité fait partie de la version Premium. Contacte ton professeur pour débloquer l'accès complet.</p>
+    <div style="display:flex; gap:10px;">
+      <button class="btn-principal" id="btn-fermer-premium" style="background:transparent; border:1.5px solid var(--line); color:var(--navy);">Fermer</button>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -733,6 +769,7 @@ function lireFichierTexte(fichier){
 $('btn-creer-activite').addEventListener('click', async () => {
   const titre = $('act-titre').value.trim();
   const niveau = $('act-niveau').value;
+  const categorie = $('act-categorie').value;
   const examen = $('act-examen').value;
   const acces = $('act-acces').value;
   const fichier = $('act-fichier').files[0];
@@ -747,11 +784,16 @@ $('btn-creer-activite').addEventListener('click', async () => {
     let contenu = null;
     if(fichier) contenu = await lireFichierTexte(fichier);
 
-    const donnees = { title: titre, level: niveau, examType: examen, access: acces, updatedAt: serverTimestamp() };
+    const donnees = { title: titre, level: niveau, category: categorie, examType: examen, access: acces, updatedAt: serverTimestamp() };
     if(contenu !== null) donnees.content = contenu;
 
+    // Aperçu public (catalogue) : titre/niveau/catégorie/accès uniquement, jamais le contenu.
+    const apercu = { title: titre, level: niveau, category: categorie, examType: examen, access: acces, updatedAt: serverTimestamp() };
+
+    let idActivite;
     if(activiteEnEdition){
-      await setDoc(doc(db, 'activities', activiteEnEdition), donnees, { merge: true });
+      idActivite = activiteEnEdition;
+      await setDoc(doc(db, 'activities', idActivite), donnees, { merge: true });
       msg.className = 'msg-ok';
       msg.textContent = "Activité modifiée.";
       activiteEnEdition = null;
@@ -760,10 +802,13 @@ $('btn-creer-activite').addEventListener('click', async () => {
       donnees.createdAt = serverTimestamp();
       donnees.autorises = [];
       const ref = doc(collection(db, 'activities'));
+      idActivite = ref.id;
       await setDoc(ref, donnees);
+      apercu.createdAt = serverTimestamp();
       msg.className = 'msg-ok';
       msg.textContent = "Activité ajoutée.";
     }
+    await setDoc(doc(db, 'catalogue', idActivite), apercu, { merge: true });
     $('act-titre').value=''; $('act-fichier').value='';
     chargerActivitesAdmin();
   }catch(e){
@@ -773,6 +818,7 @@ $('btn-creer-activite').addEventListener('click', async () => {
 
 let activitesCache = [];
 let filtreNiveauAdmin = null;
+let filtreCategorieAdmin = null;
 let filtreExamenAdmin = null;
 
 function libelleExamen(v){
@@ -787,8 +833,15 @@ async function chargerActivitesAdmin(){
   afficherTableActivites();
 }
 
+function libelleCategorie(v){
+  if(v==='grammaire') return 'Grammaire';
+  if(v==='vocabulaire') return 'Vocabulaire';
+  return 'Général';
+}
+
 function construireFiltresAdmin(){
   const niveaux = ['A1','A2','B1','B2','C1','C2'];
+  const categories = ['grammaire','vocabulaire','general'];
   const examens = ['general','DELF','DALF','TEF','TCF'];
   const cont = $('filtres-admin');
   cont.innerHTML = '';
@@ -802,6 +855,15 @@ function construireFiltresAdmin(){
     groupeNiveau.appendChild(creerPuce(n, filtreNiveauAdmin===n, ()=>{ filtreNiveauAdmin = (filtreNiveauAdmin===n?null:n); construireFiltresAdmin(); afficherTableActivites(); }));
   });
   cont.appendChild(groupeNiveau);
+
+  const groupeCategorie = document.createElement('div');
+  groupeCategorie.className = 'filtre-groupe';
+  groupeCategorie.innerHTML = `<span class="filtre-label">Catégorie</span>`;
+  groupeCategorie.appendChild(creerPuce('Toutes', !filtreCategorieAdmin, ()=>{ filtreCategorieAdmin=null; construireFiltresAdmin(); afficherTableActivites(); }));
+  categories.forEach(c=>{
+    groupeCategorie.appendChild(creerPuce(libelleCategorie(c), filtreCategorieAdmin===c, ()=>{ filtreCategorieAdmin = (filtreCategorieAdmin===c?null:c); construireFiltresAdmin(); afficherTableActivites(); }));
+  });
+  cont.appendChild(groupeCategorie);
 
   const groupeExamen = document.createElement('div');
   groupeExamen.className = 'filtre-groupe';
@@ -827,6 +889,7 @@ function afficherTableActivites(){
   tbody.innerHTML = '';
   const filtrees = activitesCache.filter(a =>
     (!filtreNiveauAdmin || a.level === filtreNiveauAdmin) &&
+    (!filtreCategorieAdmin || (a.category||'general') === filtreCategorieAdmin) &&
     (!filtreExamenAdmin || (a.examType||'general') === filtreExamenAdmin)
   );
   filtrees.forEach(a => {
@@ -834,7 +897,7 @@ function afficherTableActivites(){
     const acces = a.access === 'payant'
       ? `<span class="badge-acces badge-payant">🔒 Payant</span>`
       : `<span class="badge-acces badge-gratuit">Gratuit</span>`;
-    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td>${libelleExamen(a.examType)}</td><td>${acces}</td>
+    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td>${libelleCategorie(a.category)}</td><td>${libelleExamen(a.examType)}</td><td>${acces}</td>
       <td style="white-space:nowrap;">
         <button class="btn-mini" style="background:var(--teal); margin-right:6px;" data-edit="${a.id}">Modifier</button>
         <button class="btn-mini" data-id="${a.id}">Supprimer</button>
@@ -846,6 +909,7 @@ function afficherTableActivites(){
     b.addEventListener('click', async ()=>{
       if(confirm("Supprimer cette activité ?")){
         await deleteDoc(doc(db,'activities', b.dataset.id));
+        await deleteDoc(doc(db,'catalogue', b.dataset.id));
         chargerActivitesAdmin();
       }
     });
@@ -857,6 +921,7 @@ function afficherTableActivites(){
       activiteEnEdition = a.id;
       $('act-titre').value = a.title || '';
       $('act-niveau').value = a.level || 'A1';
+      $('act-categorie').value = a.category || 'general';
       $('act-examen').value = a.examType || 'general';
       $('act-acces').value = a.access || 'gratuit';
       $('act-fichier').value = '';
@@ -952,6 +1017,7 @@ $('btn-export-csv').addEventListener('click', () => {
 let activitesEleveCache = [];
 let termineEleveCache = new Set();
 let filtreNiveauEleve = null;
+let filtreCategorieEleve = null;
 let filtreExamenEleve = null;
 
 async function chargerActivitesEleve(){
@@ -968,14 +1034,27 @@ async function chargerActivitesEleve(){
   if(profilActuel.accessLevel === 'total'){
     // Accès total : une seule requête suffit (voir règles de sécurité)
     const snap = await getDocs(collection(db,'activities'));
-    snap.forEach(d=>{ activitesEleveCache.push({ id:d.id, ...d.data() }); vues.add(d.id); });
+    snap.forEach(d=>{ activitesEleveCache.push({ id:d.id, ...d.data(), verrouille:false }); vues.add(d.id); });
   } else {
     const [gratuitSnap, autoriseesSnap] = await Promise.all([
       getDocs(query(collection(db,'activities'), where('access','==','gratuit'))),
       getDocs(query(collection(db,'activities'), where('autorises','array-contains',profilActuel.uid)))
     ]);
-    gratuitSnap.forEach(d=>{ if(!vues.has(d.id)){ activitesEleveCache.push({ id:d.id, ...d.data() }); vues.add(d.id); } });
-    autoriseesSnap.forEach(d=>{ if(!vues.has(d.id)){ activitesEleveCache.push({ id:d.id, ...d.data() }); vues.add(d.id); } });
+    gratuitSnap.forEach(d=>{ if(!vues.has(d.id)){ activitesEleveCache.push({ id:d.id, ...d.data(), verrouille:false }); vues.add(d.id); } });
+    autoriseesSnap.forEach(d=>{ if(!vues.has(d.id)){ activitesEleveCache.push({ id:d.id, ...d.data(), verrouille:false }); vues.add(d.id); } });
+
+    // Aperçu des activités Premium auxquelles l'élève n'a pas encore accès :
+    // invite à l'achat sans jamais exposer le contenu (le catalogue ne contient pas "content").
+    try{
+      const catalogueSnap = await getDocs(collection(db,'catalogue'));
+      catalogueSnap.forEach(d=>{
+        if(!vues.has(d.id)){
+          const c = d.data();
+          activitesEleveCache.push({ id:d.id, ...c, verrouille:true });
+          vues.add(d.id);
+        }
+      });
+    }catch(e){ /* le catalogue n'est peut-être pas encore configuré côté règles Firestore */ }
   }
 
   construireFiltresEleve();
@@ -984,6 +1063,7 @@ async function chargerActivitesEleve(){
 
 function construireFiltresEleve(){
   const niveaux = ['A1','A2','B1','B2','C1','C2'];
+  const categories = ['grammaire','vocabulaire','general'];
   const examens = ['general','DELF','DALF','TEF','TCF'];
   const cont = $('filtres-eleve');
   cont.innerHTML = '';
@@ -996,6 +1076,15 @@ function construireFiltresEleve(){
     groupeNiveau.appendChild(creerPuce(n, filtreNiveauEleve===n, ()=>{ filtreNiveauEleve = (filtreNiveauEleve===n?null:n); construireFiltresEleve(); afficherGrilleActivites(); }));
   });
   cont.appendChild(groupeNiveau);
+
+  const groupeCategorie = document.createElement('div');
+  groupeCategorie.className = 'filtre-groupe';
+  groupeCategorie.innerHTML = `<span class="filtre-label">Catégorie</span>`;
+  groupeCategorie.appendChild(creerPuce('Toutes', !filtreCategorieEleve, ()=>{ filtreCategorieEleve=null; construireFiltresEleve(); afficherGrilleActivites(); }));
+  categories.forEach(c=>{
+    groupeCategorie.appendChild(creerPuce(libelleCategorie(c), filtreCategorieEleve===c, ()=>{ filtreCategorieEleve = (filtreCategorieEleve===c?null:c); construireFiltresEleve(); afficherGrilleActivites(); }));
+  });
+  cont.appendChild(groupeCategorie);
 
   const groupeExamen = document.createElement('div');
   groupeExamen.className = 'filtre-groupe';
@@ -1012,20 +1101,26 @@ function afficherGrilleActivites(){
   grille.innerHTML = '';
   const filtrees = activitesEleveCache.filter(a =>
     (!filtreNiveauEleve || a.level === filtreNiveauEleve) &&
+    (!filtreCategorieEleve || (a.category||'general') === filtreCategorieEleve) &&
     (!filtreExamenEleve || (a.examType||'general') === filtreExamenEleve)
   );
   filtrees.forEach(a=>{
     const estFait = termineEleveCache.has(a.id);
     const carte = document.createElement('div');
-    carte.className = 'carte-activite';
+    carte.className = 'carte-activite' + (a.verrouille ? ' verrouillee' : '');
     carte.innerHTML = `
+      ${a.verrouille ? '<div class="cadenas-badge">🔒</div>' : ''}
       <div class="examen-badge">${libelleExamen(a.examType)}</div>
       <div class="niveau-badge">${a.level||''}</div>
       <div class="tampon-activite ${estFait?'fait':''}">${estFait?'✓':'FR'}</div>
       <h3>${a.title}</h3>
+      <div class="categorie-badge">${libelleCategorie(a.category)}</div>
       <div class="actions-carte">
-        <button class="btn-ouvrir" data-ouvrir="${a.id}">Ouvrir l'activité</button>
-        <button class="btn-termine ${estFait?'actif':''}" data-id="${a.id}">${estFait?'Terminé ✓':'Marquer comme terminé'}</button>
+        ${a.verrouille
+          ? `<button class="btn-premium" data-premium="${a.id}">🔒 Débloquer (Premium)</button>`
+          : `<button class="btn-ouvrir" data-ouvrir="${a.id}">Ouvrir l'activité</button>
+             <button class="btn-termine ${estFait?'actif':''}" data-id="${a.id}">${estFait?'Terminé ✓':'Marquer comme terminé'}</button>`
+        }
       </div>
     `;
     grille.appendChild(carte);
@@ -1037,6 +1132,15 @@ function afficherGrilleActivites(){
       const a = activitesEleveCache.find(x=>x.id===b.dataset.ouvrir);
       if(!a) return;
       ouvrirVisionneuse(a);
+    });
+  });
+
+  grille.querySelectorAll('[data-premium]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const a = activitesEleveCache.find(x=>x.id===b.dataset.premium);
+      if(!a) return;
+      $('premium-activite-nom').textContent = `« ${a.title} » (${a.level||''} — ${libelleCategorie(a.category)})`;
+      $('modale-premium').classList.remove('hidden');
     });
   });
 
@@ -1052,6 +1156,10 @@ function afficherGrilleActivites(){
     });
   });
 }
+
+$('btn-fermer-premium').addEventListener('click', ()=>{
+  $('modale-premium').classList.add('hidden');
+});
 
 function ouvrirVisionneuse(activite){
   $('visionneuse-titre').textContent = activite.title;
