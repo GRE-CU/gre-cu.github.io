@@ -227,6 +227,21 @@
     font-weight:600; cursor:pointer; font-family:'Work Sans',sans-serif; font-size:0.88rem;
   }
   .btn-export:hover{background:var(--navy); color:var(--cream);}
+
+  /* ===== VISIONNEUSE PRIVÉE ===== */
+  .visionneuse-fond{
+    position:fixed; inset:0; background:var(--navy-deep); z-index:200;
+    display:flex; flex-direction:column;
+  }
+  .visionneuse-barre{
+    background:var(--navy); color:var(--cream); padding:14px 22px; display:flex; justify-content:space-between; align-items:center;
+    font-family:'Fraunces',serif; font-size:1.05rem;
+  }
+  #visionneuse-iframe{flex:1; width:100%; border:none; background:white;}
+  .badge-acces{display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.75rem; font-weight:700;}
+  .badge-gratuit{background:#DCEFE9; color:var(--teal);}
+  .badge-payant{background:#F8DDD0; color:var(--coral);}
+  .cadenas{font-size:0.95rem;}
 </style>
 </head>
 <body>
@@ -304,12 +319,29 @@
       <div class="bloc">
         <h2>Liste des élèves</h2>
         <table id="table-eleves">
-          <thead><tr><th>Nom</th><th>E-mail</th><th></th></tr></thead>
+          <thead><tr><th>Nom</th><th>E-mail</th><th>Accès</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="vide hidden" id="eleves-vide">Aucun élève pour le moment.</div>
       </div>
     </section>
+
+<!-- ===================== MODALE GESTION DE L'ACCÈS ===================== -->
+<div class="modale-fond hidden" id="modale-acces">
+  <div class="modale-carte" style="max-width:480px; max-height:80vh; overflow-y:auto;">
+    <h2 style="color:var(--navy); margin-bottom:6px;">Gérer l'accès</h2>
+    <p style="color:#8a8f98; font-size:0.9rem; margin-bottom:18px;" id="acces-eleve-nom"></p>
+    <label style="display:flex; align-items:center; gap:10px; margin-bottom:18px; cursor:pointer;">
+      <input type="checkbox" id="acces-total" style="width:18px; height:18px;">
+      <span><strong>Accès total</strong> — voit tout le contenu premium, sans sélection au cas par cas.</span>
+    </label>
+    <div id="acces-liste-payantes"></div>
+    <div style="display:flex; gap:10px; margin-top:20px;">
+      <button class="btn-principal" id="btn-fermer-acces" style="background:transparent; border:1.5px solid var(--line); color:var(--navy);">Fermer</button>
+    </div>
+    <div class="msg-erreur" id="acces-msg"></div>
+  </div>
+</div>
 
     <!-- --- Onglet Activités --- -->
     <section id="onglet-activites" class="hidden">
@@ -332,7 +364,17 @@
             <option value="TCF">TCF</option>
           </select>
         </div>
-        <div class="champ"><label>Lien de l'activité (URL)</label><input type="url" id="act-url" placeholder="https://tonpseudo.github.io/repo/futur-proche.html"></div>
+        <div class="champ"><label>Accès</label>
+          <select id="act-acces">
+            <option value="gratuit">Gratuit (visible par tous les élèves)</option>
+            <option value="payant">Payant / Premium (accès à autoriser par élève)</option>
+          </select>
+        </div>
+        <div class="champ">
+          <label>Fichier de l'activité (.html)</label>
+          <input type="file" id="act-fichier" accept=".html,text/html">
+          <div style="font-size:0.8rem; color:#8a8f98; margin-top:6px;" id="act-fichier-info">Le fichier est stocké de façon privée — jamais publié comme lien public.</div>
+        </div>
         <button class="btn-principal btn-secondaire" id="btn-creer-activite" style="max-width:280px; margin:10px auto 0; display:block;">Ajouter l'activité</button>
         <div class="msg-erreur" id="creer-activite-msg"></div>
       </div>
@@ -340,7 +382,7 @@
         <h2>Activités existantes</h2>
         <div class="filtres" id="filtres-admin"></div>
         <table id="table-activites">
-          <thead><tr><th>Titre</th><th>Niveau</th><th>Filière</th><th></th></tr></thead>
+          <thead><tr><th>Titre</th><th>Niveau</th><th>Filière</th><th>Accès</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="vide hidden" id="activites-vide">Aucune activité pour le moment.</div>
@@ -386,6 +428,15 @@
 
 </main>
 
+<!-- ===================== VISIONNEUSE PRIVÉE D'ACTIVITÉ ===================== -->
+<div class="visionneuse-fond hidden" id="visionneuse">
+  <div class="visionneuse-barre">
+    <span id="visionneuse-titre"></span>
+    <button class="btn-logout" id="btn-fermer-visionneuse">✕ Fermer</button>
+  </div>
+  <iframe id="visionneuse-iframe" sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -393,7 +444,7 @@ import {
   createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, serverTimestamp, query, where
+  getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, serverTimestamp, query, where, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -570,6 +621,7 @@ $('btn-creer-eleve').addEventListener('click', async () => {
 async function chargerEleves(){
   const q = query(collection(db, 'users'));
   const snap = await getDocs(q);
+  elevesCache = {};
   const tbody = document.querySelector('#table-eleves tbody');
   tbody.innerHTML = '';
   let n = 0;
@@ -577,12 +629,18 @@ async function chargerEleves(){
     const u = d.data();
     if(u.role !== 'student') return;
     n++;
+    elevesCache[d.id] = u;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${u.displayName||''}</td><td>${u.email||''}</td><td><button class="btn-mini" data-uid="${d.id}">Retirer</button></td>`;
+    tr.innerHTML = `<td>${u.displayName||''}</td><td>${u.email||''}</td>
+      <td>${u.accessLevel==='total' ? '<span class="badge-acces badge-gratuit">Total</span>' : '<span class="badge-acces badge-payant">Sélectif</span>'}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn-mini" style="background:var(--teal); margin-right:6px;" data-acces="${d.id}">Gérer l'accès</button>
+        <button class="btn-mini" data-uid="${d.id}">Retirer</button>
+      </td>`;
     tbody.appendChild(tr);
   });
   $('eleves-vide').classList.toggle('hidden', n>0);
-  tbody.querySelectorAll('.btn-mini').forEach(b=>{
+  tbody.querySelectorAll('[data-uid]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       if(confirm("Retirer l'accès de cet élève à la plateforme ?")){
         await deleteDoc(doc(db,'users', b.dataset.uid));
@@ -590,34 +648,123 @@ async function chargerEleves(){
       }
     });
   });
+  tbody.querySelectorAll('[data-acces]').forEach(b=>{
+    b.addEventListener('click', () => ouvrirModaleAcces(b.dataset.acces));
+  });
 }
+
+// ===== GESTION DE L'ACCÈS PAR ÉLÈVE =====
+let elevesCache = {};
+let eleveEnGestion = null;
+
+async function ouvrirModaleAcces(uid){
+  eleveEnGestion = uid;
+  const eleve = elevesCache[uid];
+  $('acces-eleve-nom').textContent = eleve.displayName || eleve.email;
+  $('acces-total').checked = eleve.accessLevel === 'total';
+  $('acces-msg').textContent = '';
+
+  // S'assure d'avoir les activités à jour
+  if(activitesCache.length === 0){
+    const snap = await getDocs(collection(db, 'activities'));
+    activitesCache = [];
+    snap.forEach(d => activitesCache.push({ id: d.id, ...d.data() }));
+  }
+  const payantes = activitesCache.filter(a => a.access === 'payant');
+  const cont = $('acces-liste-payantes');
+  cont.innerHTML = '';
+  if(payantes.length === 0){
+    cont.innerHTML = `<p style="color:#8a8f98; font-size:0.9rem;">Aucune activité payante pour le moment.</p>`;
+  } else {
+    payantes.forEach(a=>{
+      const autorise = (a.autorises||[]).includes(uid);
+      const ligne = document.createElement('label');
+      ligne.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); cursor:pointer;';
+      ligne.innerHTML = `<input type="checkbox" data-activite="${a.id}" ${autorise?'checked':''} style="width:16px; height:16px;"> <span>${a.title} <span style="color:#8a8f98; font-size:0.8rem;">(${a.level||''})</span></span>`;
+      cont.appendChild(ligne);
+    });
+  }
+  $('modale-acces').classList.remove('hidden');
+}
+
+$('acces-total').addEventListener('change', async () => {
+  if(!eleveEnGestion) return;
+  try{
+    await setDoc(doc(db,'users',eleveEnGestion), { accessLevel: $('acces-total').checked ? 'total' : 'gratuit' }, { merge:true });
+    elevesCache[eleveEnGestion].accessLevel = $('acces-total').checked ? 'total' : 'gratuit';
+    chargerEleves();
+  }catch(e){
+    $('acces-msg').textContent = "Erreur lors de la mise à jour.";
+  }
+});
+
+$('acces-liste-payantes').addEventListener('change', async (e) => {
+  if(e.target.type !== 'checkbox' || !eleveEnGestion) return;
+  const activiteId = e.target.dataset.activite;
+  try{
+    await setDoc(doc(db,'activities',activiteId), {
+      autorises: e.target.checked ? arrayUnion(eleveEnGestion) : arrayRemove(eleveEnGestion)
+    }, { merge:true });
+    const a = activitesCache.find(x=>x.id===activiteId);
+    if(a){
+      a.autorises = a.autorises || [];
+      if(e.target.checked && !a.autorises.includes(eleveEnGestion)) a.autorises.push(eleveEnGestion);
+      if(!e.target.checked) a.autorises = a.autorises.filter(u=>u!==eleveEnGestion);
+    }
+  }catch(err){
+    $('acces-msg').textContent = "Erreur lors de la mise à jour.";
+  }
+});
+
+$('btn-fermer-acces').addEventListener('click', () => $('modale-acces').classList.add('hidden'));
 
 // ===== CRÉER / MODIFIER UNE ACTIVITÉ =====
 let activiteEnEdition = null;
+
+function lireFichierTexte(fichier){
+  return new Promise((resolve, reject) => {
+    const lecteur = new FileReader();
+    lecteur.onload = () => resolve(lecteur.result);
+    lecteur.onerror = () => reject(new Error('Lecture impossible'));
+    lecteur.readAsText(fichier, 'UTF-8');
+  });
+}
 
 $('btn-creer-activite').addEventListener('click', async () => {
   const titre = $('act-titre').value.trim();
   const niveau = $('act-niveau').value;
   const examen = $('act-examen').value;
-  const url = $('act-url').value.trim();
+  const acces = $('act-acces').value;
+  const fichier = $('act-fichier').files[0];
   const msg = $('creer-activite-msg');
   msg.textContent = '';
   msg.className = 'msg-erreur';
-  if(!titre || !url){ msg.textContent = "Merci d'indiquer un titre et un lien."; return; }
+  if(!titre){ msg.textContent = "Merci d'indiquer un titre."; return; }
+  if(!fichier && !activiteEnEdition){ msg.textContent = "Merci de choisir un fichier .html."; return; }
+  if(fichier && fichier.size > 900000){ msg.textContent = "Le fichier est trop volumineux (max ~900 Ko). Compresse-le d'abord."; return; }
+
   try{
+    let contenu = null;
+    if(fichier) contenu = await lireFichierTexte(fichier);
+
+    const donnees = { title: titre, level: niveau, examType: examen, access: acces, updatedAt: serverTimestamp() };
+    if(contenu !== null) donnees.content = contenu;
+
     if(activiteEnEdition){
-      await setDoc(doc(db, 'activities', activiteEnEdition), { title: titre, level: niveau, examType: examen, url, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'activities', activiteEnEdition), donnees, { merge: true });
       msg.className = 'msg-ok';
       msg.textContent = "Activité modifiée.";
       activiteEnEdition = null;
       $('btn-creer-activite').textContent = "Ajouter l'activité";
     } else {
+      donnees.createdAt = serverTimestamp();
+      donnees.autorises = [];
       const ref = doc(collection(db, 'activities'));
-      await setDoc(ref, { title: titre, level: niveau, examType: examen, url, createdAt: serverTimestamp() });
+      await setDoc(ref, donnees);
       msg.className = 'msg-ok';
       msg.textContent = "Activité ajoutée.";
     }
-    $('act-titre').value=''; $('act-url').value='';
+    $('act-titre').value=''; $('act-fichier').value='';
     chargerActivitesAdmin();
   }catch(e){
     msg.textContent = "Erreur lors de l'enregistrement.";
@@ -684,7 +831,10 @@ function afficherTableActivites(){
   );
   filtrees.forEach(a => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td>${libelleExamen(a.examType)}</td>
+    const acces = a.access === 'payant'
+      ? `<span class="badge-acces badge-payant">🔒 Payant</span>`
+      : `<span class="badge-acces badge-gratuit">Gratuit</span>`;
+    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td>${libelleExamen(a.examType)}</td><td>${acces}</td>
       <td style="white-space:nowrap;">
         <button class="btn-mini" style="background:var(--teal); margin-right:6px;" data-edit="${a.id}">Modifier</button>
         <button class="btn-mini" data-id="${a.id}">Supprimer</button>
@@ -708,7 +858,9 @@ function afficherTableActivites(){
       $('act-titre').value = a.title || '';
       $('act-niveau').value = a.level || 'A1';
       $('act-examen').value = a.examType || 'general';
-      $('act-url').value = a.url || '';
+      $('act-acces').value = a.access || 'gratuit';
+      $('act-fichier').value = '';
+      $('act-fichier-info').textContent = "Laisse vide pour garder le fichier actuel, ou choisis-en un nouveau pour le remplacer.";
       $('btn-creer-activite').textContent = "Enregistrer les modifications";
       $('act-titre').scrollIntoView({behavior:'smooth', block:'center'});
     });
@@ -803,17 +955,28 @@ let filtreNiveauEleve = null;
 let filtreExamenEleve = null;
 
 async function chargerActivitesEleve(){
-  const [actSnap, progSnap] = await Promise.all([
-    getDocs(collection(db,'activities')),
-    getDocs(query(collection(db,'progress'), where('uid','==',profilActuel.uid)))
-  ]);
+  const progSnap = await getDocs(query(collection(db,'progress'), where('uid','==',profilActuel.uid)));
   termineEleveCache = new Set();
   progSnap.forEach(d=>{
     const p = d.data();
     if(p.status === 'termine') termineEleveCache.add(p.activityId);
   });
+
   activitesEleveCache = [];
-  actSnap.forEach(d=> activitesEleveCache.push({ id: d.id, ...d.data() }));
+  const vues = new Set();
+
+  if(profilActuel.accessLevel === 'total'){
+    // Accès total : une seule requête suffit (voir règles de sécurité)
+    const snap = await getDocs(collection(db,'activities'));
+    snap.forEach(d=>{ activitesEleveCache.push({ id:d.id, ...d.data() }); vues.add(d.id); });
+  } else {
+    const [gratuitSnap, autoriseesSnap] = await Promise.all([
+      getDocs(query(collection(db,'activities'), where('access','==','gratuit'))),
+      getDocs(query(collection(db,'activities'), where('autorises','array-contains',profilActuel.uid)))
+    ]);
+    gratuitSnap.forEach(d=>{ if(!vues.has(d.id)){ activitesEleveCache.push({ id:d.id, ...d.data() }); vues.add(d.id); } });
+    autoriseesSnap.forEach(d=>{ if(!vues.has(d.id)){ activitesEleveCache.push({ id:d.id, ...d.data() }); vues.add(d.id); } });
+  }
 
   construireFiltresEleve();
   afficherGrilleActivites();
@@ -861,13 +1024,21 @@ function afficherGrilleActivites(){
       <div class="tampon-activite ${estFait?'fait':''}">${estFait?'✓':'FR'}</div>
       <h3>${a.title}</h3>
       <div class="actions-carte">
-        <a class="btn-ouvrir" href="${a.url}" target="_blank" rel="noopener">Ouvrir l'activité</a>
+        <button class="btn-ouvrir" data-ouvrir="${a.id}">Ouvrir l'activité</button>
         <button class="btn-termine ${estFait?'actif':''}" data-id="${a.id}">${estFait?'Terminé ✓':'Marquer comme terminé'}</button>
       </div>
     `;
     grille.appendChild(carte);
   });
   $('activites-eleve-vide').classList.toggle('hidden', filtrees.length>0);
+
+  grille.querySelectorAll('[data-ouvrir]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const a = activitesEleveCache.find(x=>x.id===b.dataset.ouvrir);
+      if(!a) return;
+      ouvrirVisionneuse(a);
+    });
+  });
 
   grille.querySelectorAll('.btn-termine').forEach(b=>{
     b.addEventListener('click', async ()=>{
@@ -881,6 +1052,24 @@ function afficherGrilleActivites(){
     });
   });
 }
+
+function ouvrirVisionneuse(activite){
+  $('visionneuse-titre').textContent = activite.title;
+  const iframe = $('visionneuse-iframe');
+  if(activite.content){
+    iframe.removeAttribute('src');
+    iframe.srcdoc = activite.content;
+  } else if(activite.url){
+    iframe.srcdoc = '';
+    iframe.src = activite.url;
+  }
+  $('visionneuse').classList.remove('hidden');
+}
+$('btn-fermer-visionneuse').addEventListener('click', ()=>{
+  $('visionneuse').classList.add('hidden');
+  $('visionneuse-iframe').src = 'about:blank';
+  $('visionneuse-iframe').srcdoc = '';
+});
 </script>
 </body>
 </html>
