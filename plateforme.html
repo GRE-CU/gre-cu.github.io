@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon Passeport Français</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#16324F;
+    --navy-deep:#0E2338;
+    --gold:#E3A438;
+    --gold-soft:#F3D9A5;
+    --cream:#FAF3E7;
+    --teal:#3E8E8E;
+    --coral:#E4572E;
+    --ink:#1A2430;
+    --paper:#FFFDF8;
+    --line:#E2D5BC;
+    --radius:18px;
+    --shadow:0 10px 30px rgba(22,50,79,0.15);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(227,164,56,0.18), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(62,142,142,0.18), transparent 40%),
+      var(--cream);
+    font-family:'Work Sans', sans-serif;
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  h1,h2,h3{font-family:'Fraunces', serif; font-weight:600; margin:0;}
+  .hidden{display:none !important;}
+
+  /* ===== TOPBAR ===== */
+  .topbar{
+    width:100%;
+    background:var(--navy);
+    color:var(--cream);
+    padding:18px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    box-shadow:0 4px 16px rgba(0,0,0,0.15);
+  }
+  .topbar .brand{display:flex; align-items:center; gap:12px;}
+  .topbar .brand .stamp-mini{
+    width:36px;height:36px;border-radius:50%;
+    border:2px dashed var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px; color:var(--gold); font-family:'Fraunces',serif;
+  }
+  .topbar h1{font-size:1.3rem; color:var(--cream);}
+  .topbar .who{font-size:0.95rem; opacity:0.85; margin-right:16px;}
+  .btn-logout{
+    background:transparent; border:1.5px solid var(--gold-soft); color:var(--gold-soft);
+    padding:8px 16px; border-radius:999px; cursor:pointer; font-size:0.9rem;
+    font-family:'Work Sans',sans-serif; transition:all .2s;
+  }
+  .btn-logout:hover{background:var(--gold-soft); color:var(--navy-deep);}
+
+  main{width:100%; max-width:1000px; padding:40px 24px 80px; display:flex; flex-direction:column; align-items:center;}
+
+  /* ===== LOGIN ===== */
+  #vue-login{
+    min-height:90vh; width:100%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .carte-login{
+    background:var(--paper);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:48px 44px;
+    width:100%;
+    max-width:420px;
+    text-align:center;
+    border:1px solid var(--line);
+  }
+  .tampon{
+    width:84px;height:84px;margin:0 auto 18px;
+    border-radius:50%;
+    border:3px dashed var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    transform:rotate(-6deg);
+    color:var(--navy);
+    font-family:'Fraunces',serif;
+    font-size:2rem;
+  }
+  .carte-login h1{font-size:1.8rem; color:var(--navy); margin-bottom:6px;}
+  .carte-login p.sub{color:#6b7280; margin-bottom:28px; font-size:0.98rem;}
+  .champ{text-align:left; margin-bottom:18px;}
+  .champ label{display:block; font-size:0.85rem; font-weight:600; color:var(--navy); margin-bottom:6px;}
+  .champ input, .champ select{
+    width:100%; padding:13px 14px; border-radius:12px; border:1.5px solid var(--line);
+    font-size:1rem; font-family:'Work Sans',sans-serif; background:var(--cream);
+  }
+  .champ input:focus, .champ select:focus{outline:2px solid var(--teal); border-color:var(--teal);}
+  .btn-principal{
+    width:100%; padding:14px; border:none; border-radius:12px;
+    background:var(--navy); color:var(--cream); font-size:1.02rem; font-weight:600;
+    cursor:pointer; margin-top:6px; transition:background .2s;
+    font-family:'Work Sans',sans-serif;
+  }
+  .btn-principal:hover{background:var(--navy-deep);}
+  .btn-secondaire{
+    background:var(--gold); color:var(--navy-deep);
+  }
+  .btn-secondaire:hover{background:#cf9026;}
+  .msg-erreur{color:var(--coral); font-size:0.9rem; margin-top:14px; min-height:18px;}
+  .msg-ok{color:var(--teal); font-size:0.9rem; margin-top:14px; min-height:18px;}
+
+  /* ===== ONGLET NAV (admin) ===== */
+  .onglets{display:flex; gap:10px; margin-bottom:32px; flex-wrap:wrap; justify-content:center;}
+  .onglet{
+    padding:11px 22px; border-radius:999px; background:var(--paper); border:1.5px solid var(--line);
+    cursor:pointer; font-weight:600; color:var(--navy); font-size:0.95rem; transition:all .2s;
+  }
+  .onglet.actif{background:var(--navy); color:var(--cream); border-color:var(--navy);}
+
+  .bloc{
+    background:var(--paper); border-radius:var(--radius); border:1px solid var(--line);
+    box-shadow:var(--shadow); padding:32px; width:100%; margin-bottom:28px;
+  }
+  .bloc h2{color:var(--navy); font-size:1.3rem; margin-bottom:20px; text-align:center;}
+  .grille-form{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:8px;}
+  @media (max-width:600px){.grille-form{grid-template-columns:1fr;}}
+
+  table{width:100%; border-collapse:collapse; margin-top:18px;}
+  th,td{padding:12px 10px; text-align:left; border-bottom:1px solid var(--line); font-size:0.92rem;}
+  th{color:var(--navy); font-family:'Fraunces',serif; font-weight:600;}
+  .badge{
+    display:inline-block; padding:4px 12px; border-radius:999px; font-size:0.78rem; font-weight:600;
+  }
+  .badge-termine{background:#DCEFE9; color:var(--teal);}
+  .badge-attente{background:#F3E6D0; color:#8a6d1f;}
+  .btn-mini{
+    border:none; background:var(--coral); color:white; padding:6px 12px; border-radius:8px;
+    font-size:0.8rem; cursor:pointer;
+  }
+  .btn-mini:hover{opacity:0.85;}
+
+  /* ===== ESPACE ÉLÈVE ===== */
+  .accueil-eleve{text-align:center; margin-bottom:36px;}
+  .accueil-eleve h1{font-size:2.1rem; color:var(--navy);}
+  .accueil-eleve p{color:#6b7280; font-size:1.05rem; margin-top:6px;}
+
+  .grille-activites{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:22px; width:100%;
+  }
+  .carte-activite{
+    background:var(--paper); border-radius:var(--radius); border:1px solid var(--line);
+    box-shadow:var(--shadow); padding:26px; text-align:center; position:relative;
+    transition:transform .2s;
+  }
+  .carte-activite:hover{transform:translateY(-4px);}
+  .niveau-badge{
+    position:absolute; top:18px; right:18px; background:var(--gold); color:var(--navy-deep);
+    font-size:0.75rem; font-weight:700; padding:3px 10px; border-radius:999px;
+  }
+  .tampon-activite{
+    width:64px;height:64px; margin:0 auto 16px; border-radius:50%;
+    border:2.5px dashed var(--teal); display:flex; align-items:center; justify-content:center;
+    color:var(--teal); font-size:1.6rem;
+  }
+  .tampon-activite.fait{border-color:var(--gold); color:var(--gold); transform:rotate(-8deg);}
+  .carte-activite h3{font-size:1.15rem; color:var(--navy); margin-bottom:20px; min-height:44px;}
+  .actions-carte{display:flex; flex-direction:column; gap:10px;}
+  .btn-ouvrir{
+    background:var(--navy); color:var(--cream); border:none; padding:11px; border-radius:10px;
+    font-weight:600; cursor:pointer; text-decoration:none; display:block; font-family:'Work Sans',sans-serif;
+  }
+  .btn-ouvrir:hover{background:var(--navy-deep);}
+  .btn-termine{
+    background:transparent; border:1.5px solid var(--teal); color:var(--teal); padding:9px;
+    border-radius:10px; font-weight:600; cursor:pointer; font-family:'Work Sans',sans-serif;
+  }
+  .btn-termine.actif{background:var(--gold); border-color:var(--gold); color:var(--navy-deep);}
+
+  .vide{text-align:center; color:#8a8f98; padding:40px 0; font-style:italic;}
+  .chargement{text-align:center; padding:60px 0; color:var(--navy); font-family:'Fraunces',serif; font-size:1.1rem;}
+</style>
+</head>
+<body>
+
+<!-- ===================== VUE LOGIN ===================== -->
+<div id="vue-login">
+  <div class="carte-login">
+    <div class="tampon">FR</div>
+    <h1>Mon Passeport Français</h1>
+    <p class="sub">Connecte-toi pour accéder à tes activités</p>
+    <div class="champ">
+      <label for="login-email">E-mail</label>
+      <input type="email" id="login-email" placeholder="prenom.nom@exemple.com" autocomplete="username">
+    </div>
+    <div class="champ">
+      <label for="login-mdp">Mot de passe</label>
+      <input type="password" id="login-mdp" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-principal" id="btn-login">Se connecter</button>
+    <div class="msg-erreur" id="login-erreur"></div>
+  </div>
+</div>
+
+<!-- ===================== TOPBAR (app) ===================== -->
+<div class="topbar hidden" id="topbar">
+  <div class="brand">
+    <div class="stamp-mini">FR</div>
+    <h1>Mon Passeport Français</h1>
+  </div>
+  <div style="display:flex; align-items:center;">
+    <span class="who" id="topbar-nom"></span>
+    <button class="btn-logout" id="btn-logout">Se déconnecter</button>
+  </div>
+</div>
+
+<main>
+
+  <!-- ===================== VUE ADMIN ===================== -->
+  <div id="vue-admin" class="hidden" style="width:100%;">
+    <div class="onglets">
+      <div class="onglet actif" data-onglet="eleves">Élèves</div>
+      <div class="onglet" data-onglet="activites">Activités</div>
+      <div class="onglet" data-onglet="suivi">Suivi</div>
+    </div>
+
+    <!-- --- Onglet Élèves --- -->
+    <section id="onglet-eleves">
+      <div class="bloc">
+        <h2>Créer un compte élève</h2>
+        <div class="grille-form">
+          <div class="champ"><label>Prénom et nom</label><input type="text" id="nv-nom" placeholder="Marie Dupont"></div>
+          <div class="champ"><label>E-mail</label><input type="email" id="nv-email" placeholder="marie@exemple.com"></div>
+          <div class="champ"><label>Mot de passe temporaire</label><input type="text" id="nv-mdp" placeholder="Au moins 6 caractères"></div>
+        </div>
+        <button class="btn-principal btn-secondaire" id="btn-creer-eleve" style="max-width:280px; margin:10px auto 0; display:block;">Créer le compte</button>
+        <div class="msg-erreur" id="creer-eleve-msg"></div>
+      </div>
+      <div class="bloc">
+        <h2>Liste des élèves</h2>
+        <table id="table-eleves">
+          <thead><tr><th>Nom</th><th>E-mail</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="vide hidden" id="eleves-vide">Aucun élève pour le moment.</div>
+      </div>
+    </section>
+
+    <!-- --- Onglet Activités --- -->
+    <section id="onglet-activites" class="hidden">
+      <div class="bloc">
+        <h2>Ajouter une activité</h2>
+        <div class="grille-form">
+          <div class="champ"><label>Titre</label><input type="text" id="act-titre" placeholder="Le futur proche"></div>
+          <div class="champ"><label>Niveau CECRL</label>
+            <select id="act-niveau">
+              <option>A1</option><option>A2</option><option>B1</option><option>B2</option><option>C1</option><option>C2</option>
+            </select>
+          </div>
+        </div>
+        <div class="champ"><label>Lien de l'activité (URL)</label><input type="url" id="act-url" placeholder="https://tonpseudo.github.io/repo/futur-proche.html"></div>
+        <button class="btn-principal btn-secondaire" id="btn-creer-activite" style="max-width:280px; margin:10px auto 0; display:block;">Ajouter l'activité</button>
+        <div class="msg-erreur" id="creer-activite-msg"></div>
+      </div>
+      <div class="bloc">
+        <h2>Activités existantes</h2>
+        <table id="table-activites">
+          <thead><tr><th>Titre</th><th>Niveau</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="vide hidden" id="activites-vide">Aucune activité pour le moment.</div>
+      </div>
+    </section>
+
+    <!-- --- Onglet Suivi --- -->
+    <section id="onglet-suivi" class="hidden">
+      <div class="bloc">
+        <h2>Suivi des élèves</h2>
+        <table id="table-suivi">
+          <thead><tr><th>Élève</th><th>Activité</th><th>Statut</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="vide hidden" id="suivi-vide">Aucune donnée de suivi pour le moment.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== VUE ÉLÈVE ===================== -->
+  <div id="vue-eleve" class="hidden" style="width:100%;">
+    <div class="accueil-eleve">
+      <h1 id="eleve-bonjour">Bonjour !</h1>
+      <p>Voici tes activités. Ouvre-les et coche-les une fois terminées.</p>
+    </div>
+    <div class="grille-activites" id="grille-activites"></div>
+    <div class="vide hidden" id="activites-eleve-vide">Ton professeur n'a pas encore ajouté d'activités.</div>
+  </div>
+
+  <div class="chargement hidden" id="chargement">Chargement…</div>
+
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, serverTimestamp, query, where
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC_4vz-gLjxtntQBsUyqQkT9KBMGv23jfw",
+  authDomain: "plateforme-fle-gre.firebaseapp.com",
+  projectId: "plateforme-fle-gre",
+  storageBucket: "plateforme-fle-gre.firebasestorage.app",
+  messagingSenderId: "256480764946",
+  appId: "1:256480764946:web:7b3069000b78d94be624cb"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Instance secondaire : sert uniquement à créer des comptes élèves
+// sans déconnecter le compte administrateur en cours.
+const appSecondaire = initializeApp(firebaseConfig, "Secondaire");
+const authSecondaire = getAuth(appSecondaire);
+
+const $ = (id) => document.getElementById(id);
+
+const vueLogin = $('vue-login');
+const vueAdmin = $('vue-admin');
+const vueEleve = $('vue-eleve');
+const topbar = $('topbar');
+const chargement = $('chargement');
+
+let profilActuel = null; // {uid, role, displayName, email}
+
+function afficherChargement(actif){
+  chargement.classList.toggle('hidden', !actif);
+}
+
+function toutCacher(){
+  vueLogin.classList.add('hidden');
+  vueAdmin.classList.add('hidden');
+  vueEleve.classList.add('hidden');
+  topbar.classList.add('hidden');
+}
+
+// ===== LOGIN =====
+$('btn-login').addEventListener('click', async () => {
+  const email = $('login-email').value.trim();
+  const mdp = $('login-mdp').value;
+  $('login-erreur').textContent = '';
+  if(!email || !mdp){ $('login-erreur').textContent = "Merci de remplir tous les champs."; return; }
+  try{
+    await signInWithEmailAndPassword(auth, email, mdp);
+  }catch(e){
+    $('login-erreur').textContent = "E-mail ou mot de passe incorrect.";
+  }
+});
+
+$('btn-logout').addEventListener('click', () => signOut(auth));
+
+onAuthStateChanged(auth, async (user) => {
+  if(!user){
+    profilActuel = null;
+    toutCacher();
+    vueLogin.classList.remove('hidden');
+    return;
+  }
+  toutCacher();
+  afficherChargement(true);
+  try{
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    if(!snap.exists()){
+      afficherChargement(false);
+      toutCacher();
+      vueLogin.classList.remove('hidden');
+      $('login-erreur').textContent = "Ce compte n'est pas encore configuré. Contacte ton professeur.";
+      await signOut(auth);
+      return;
+    }
+    profilActuel = { uid: user.uid, email: user.email, ...snap.data() };
+    afficherChargement(false);
+    topbar.classList.remove('hidden');
+    $('topbar-nom').textContent = profilActuel.displayName || profilActuel.email;
+
+    if(profilActuel.role === 'admin'){
+      vueAdmin.classList.remove('hidden');
+      chargerEleves();
+      chargerActivitesAdmin();
+      chargerSuivi();
+    } else {
+      vueEleve.classList.remove('hidden');
+      $('eleve-bonjour').textContent = `Bonjour, ${profilActuel.displayName || ''} !`;
+      chargerActivitesEleve();
+    }
+  }catch(e){
+    afficherChargement(false);
+    console.error(e);
+  }
+});
+
+// ===== ONGLETS ADMIN =====
+document.querySelectorAll('.onglet').forEach(o => {
+  o.addEventListener('click', () => {
+    document.querySelectorAll('.onglet').forEach(x => x.classList.remove('actif'));
+    o.classList.add('actif');
+    ['eleves','activites','suivi'].forEach(k => {
+      $('onglet-'+k).classList.toggle('hidden', k !== o.dataset.onglet);
+    });
+  });
+});
+
+// ===== CRÉER UN ÉLÈVE =====
+$('btn-creer-eleve').addEventListener('click', async () => {
+  const nom = $('nv-nom').value.trim();
+  const email = $('nv-email').value.trim();
+  const mdp = $('nv-mdp').value;
+  const msg = $('creer-eleve-msg');
+  msg.textContent = '';
+  msg.className = 'msg-erreur';
+  if(!nom || !email || mdp.length < 6){
+    msg.textContent = "Vérifie le nom, l'e-mail et un mot de passe d'au moins 6 caractères.";
+    return;
+  }
+  try{
+    const cred = await createUserWithEmailAndPassword(authSecondaire, email, mdp);
+    const nouvelUid = cred.user.uid;
+    await signOut(authSecondaire);
+    await setDoc(doc(db, 'users', nouvelUid), {
+      email, displayName: nom, role: 'student', createdAt: serverTimestamp()
+    });
+    msg.className = 'msg-ok';
+    msg.textContent = `Compte créé pour ${nom}.`;
+    $('nv-nom').value=''; $('nv-email').value=''; $('nv-mdp').value='';
+    chargerEleves();
+  }catch(e){
+    msg.textContent = e.code === 'auth/email-already-in-use'
+      ? "Cet e-mail est déjà utilisé."
+      : "Erreur lors de la création du compte.";
+  }
+});
+
+async function chargerEleves(){
+  const q = query(collection(db, 'users'));
+  const snap = await getDocs(q);
+  const tbody = document.querySelector('#table-eleves tbody');
+  tbody.innerHTML = '';
+  let n = 0;
+  snap.forEach(d => {
+    const u = d.data();
+    if(u.role !== 'student') return;
+    n++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${u.displayName||''}</td><td>${u.email||''}</td><td><button class="btn-mini" data-uid="${d.id}">Retirer</button></td>`;
+    tbody.appendChild(tr);
+  });
+  $('eleves-vide').classList.toggle('hidden', n>0);
+  tbody.querySelectorAll('.btn-mini').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if(confirm("Retirer l'accès de cet élève à la plateforme ?")){
+        await deleteDoc(doc(db,'users', b.dataset.uid));
+        chargerEleves();
+      }
+    });
+  });
+}
+
+// ===== CRÉER UNE ACTIVITÉ =====
+$('btn-creer-activite').addEventListener('click', async () => {
+  const titre = $('act-titre').value.trim();
+  const niveau = $('act-niveau').value;
+  const url = $('act-url').value.trim();
+  const msg = $('creer-activite-msg');
+  msg.textContent = '';
+  msg.className = 'msg-erreur';
+  if(!titre || !url){ msg.textContent = "Merci d'indiquer un titre et un lien."; return; }
+  try{
+    const ref = doc(collection(db, 'activities'));
+    await setDoc(ref, { title: titre, level: niveau, url, createdAt: serverTimestamp() });
+    msg.className = 'msg-ok';
+    msg.textContent = "Activité ajoutée.";
+    $('act-titre').value=''; $('act-url').value='';
+    chargerActivitesAdmin();
+  }catch(e){
+    msg.textContent = "Erreur lors de l'ajout.";
+  }
+});
+
+async function chargerActivitesAdmin(){
+  const snap = await getDocs(collection(db, 'activities'));
+  const tbody = document.querySelector('#table-activites tbody');
+  tbody.innerHTML = '';
+  let n = 0;
+  snap.forEach(d => {
+    n++;
+    const a = d.data();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td><button class="btn-mini" data-id="${d.id}">Supprimer</button></td>`;
+    tbody.appendChild(tr);
+  });
+  $('activites-vide').classList.toggle('hidden', n>0);
+  tbody.querySelectorAll('.btn-mini').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if(confirm("Supprimer cette activité ?")){
+        await deleteDoc(doc(db,'activities', b.dataset.id));
+        chargerActivitesAdmin();
+      }
+    });
+  });
+}
+
+// ===== SUIVI (admin) =====
+async function chargerSuivi(){
+  const [usersSnap, actSnap, progSnap] = await Promise.all([
+    getDocs(collection(db,'users')),
+    getDocs(collection(db,'activities')),
+    getDocs(collection(db,'progress'))
+  ]);
+  const eleves = {}; usersSnap.forEach(d=>{ if(d.data().role==='student') eleves[d.id]=d.data(); });
+  const activites = {}; actSnap.forEach(d=>{ activites[d.id]=d.data(); });
+  const progressParEleve = {};
+  progSnap.forEach(d=>{
+    const p = d.data();
+    if(!progressParEleve[p.uid]) progressParEleve[p.uid] = {};
+    progressParEleve[p.uid][p.activityId] = p.status;
+  });
+
+  const tbody = document.querySelector('#table-suivi tbody');
+  tbody.innerHTML = '';
+  let n = 0;
+  Object.keys(eleves).forEach(uid=>{
+    Object.keys(activites).forEach(actId=>{
+      n++;
+      const statut = (progressParEleve[uid] && progressParEleve[uid][actId]) === 'termine';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${eleves[uid].displayName}</td><td>${activites[actId].title}</td>
+        <td><span class="badge ${statut?'badge-termine':'badge-attente'}">${statut?'Terminé':'En attente'}</span></td>`;
+      tbody.appendChild(tr);
+    });
+  });
+  $('suivi-vide').classList.toggle('hidden', n>0);
+}
+
+// ===== ESPACE ÉLÈVE =====
+async function chargerActivitesEleve(){
+  const [actSnap, progSnap] = await Promise.all([
+    getDocs(collection(db,'activities')),
+    getDocs(query(collection(db,'progress'), where('uid','==',profilActuel.uid)))
+  ]);
+  const termine = new Set();
+  progSnap.forEach(d=>{
+    const p = d.data();
+    if(p.status === 'termine') termine.add(p.activityId);
+  });
+
+  const grille = $('grille-activites');
+  grille.innerHTML = '';
+  let n = 0;
+  actSnap.forEach(d=>{
+    n++;
+    const a = d.data();
+    const estFait = termine.has(d.id);
+    const carte = document.createElement('div');
+    carte.className = 'carte-activite';
+    carte.innerHTML = `
+      <div class="niveau-badge">${a.level||''}</div>
+      <div class="tampon-activite ${estFait?'fait':''}">${estFait?'✓':'FR'}</div>
+      <h3>${a.title}</h3>
+      <div class="actions-carte">
+        <a class="btn-ouvrir" href="${a.url}" target="_blank" rel="noopener">Ouvrir l'activité</a>
+        <button class="btn-termine ${estFait?'actif':''}" data-id="${d.id}">${estFait?'Terminé ✓':'Marquer comme terminé'}</button>
+      </div>
+    `;
+    grille.appendChild(carte);
+  });
+  $('activites-eleve-vide').classList.toggle('hidden', n>0);
+
+  grille.querySelectorAll('.btn-termine').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const actId = b.dataset.id;
+      const estFait = b.classList.contains('actif');
+      const nouveauStatut = estFait ? 'en_cours' : 'termine';
+      await setDoc(doc(db, 'progress', `${profilActuel.uid}_${actId}`), {
+        uid: profilActuel.uid, activityId: actId, status: nouveauStatut, updatedAt: serverTimestamp()
+      });
+      chargerActivitesEleve();
+    });
+  });
+}
+</script>
+</body>
+</html>
