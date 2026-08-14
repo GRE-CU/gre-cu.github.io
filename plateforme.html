@@ -200,6 +200,33 @@
 
   .vide{text-align:center; color:#8a8f98; padding:40px 0; font-style:italic;}
   .chargement{text-align:center; padding:60px 0; color:var(--navy); font-family:'Fraunces',serif; font-size:1.1rem;}
+
+  /* ===== MODALE ===== */
+  .modale-fond{
+    position:fixed; inset:0; background:rgba(14,35,56,0.55); display:flex; align-items:center; justify-content:center;
+    z-index:100; padding:20px;
+  }
+  .modale-carte{
+    background:var(--paper); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:34px; width:100%; max-width:400px;
+  }
+
+  /* ===== STATS DE PROGRESSION ===== */
+  .stats-resume{display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-bottom:24px;}
+  .stat-carte{
+    background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 26px; text-align:center; min-width:140px;
+  }
+  .stat-carte .chiffre{font-family:'Fraunces',serif; font-size:1.8rem; color:var(--navy); font-weight:600;}
+  .stat-carte .label{font-size:0.8rem; color:#8a8f98; margin-top:4px;}
+  .barre-progres{
+    width:100%; height:8px; background:var(--line); border-radius:999px; overflow:hidden; margin-top:6px;
+  }
+  .barre-progres-remplie{height:100%; background:var(--teal); border-radius:999px; transition:width .3s;}
+  .btn-export{
+    background:transparent; border:1.5px solid var(--navy); color:var(--navy); padding:9px 18px; border-radius:10px;
+    font-weight:600; cursor:pointer; font-family:'Work Sans',sans-serif; font-size:0.88rem;
+  }
+  .btn-export:hover{background:var(--navy); color:var(--cream);}
 </style>
 </head>
 <body>
@@ -220,6 +247,8 @@
     </div>
     <button class="btn-principal" id="btn-login">Se connecter</button>
     <div class="msg-erreur" id="login-erreur"></div>
+    <div class="msg-ok" id="login-ok"></div>
+    <a href="#" id="lien-mdp-oublie" style="display:block; margin-top:16px; font-size:0.88rem; color:var(--teal); text-decoration:none;">Mot de passe oublié ?</a>
   </div>
 </div>
 
@@ -231,7 +260,22 @@
   </div>
   <div style="display:flex; align-items:center;">
     <span class="who" id="topbar-nom"></span>
+    <button class="btn-logout" id="btn-changer-mdp" style="margin-right:10px;">Changer le mot de passe</button>
     <button class="btn-logout" id="btn-logout">Se déconnecter</button>
+  </div>
+</div>
+
+<!-- ===================== MODALE CHANGER MOT DE PASSE ===================== -->
+<div class="modale-fond hidden" id="modale-mdp">
+  <div class="modale-carte">
+    <h2 style="color:var(--navy); margin-bottom:18px;">Changer le mot de passe</h2>
+    <div class="champ"><label>Nouveau mot de passe</label><input type="password" id="nouveau-mdp" placeholder="Au moins 6 caractères"></div>
+    <div class="champ"><label>Confirmer le mot de passe</label><input type="password" id="confirmer-mdp" placeholder="Répète le mot de passe"></div>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn-principal" id="btn-annuler-mdp" style="background:transparent; border:1.5px solid var(--line); color:var(--navy);">Annuler</button>
+      <button class="btn-principal btn-secondaire" id="btn-confirmer-mdp">Enregistrer</button>
+    </div>
+    <div class="msg-erreur" id="mdp-msg"></div>
   </div>
 </div>
 
@@ -305,8 +349,19 @@
 
     <!-- --- Onglet Suivi --- -->
     <section id="onglet-suivi" class="hidden">
+      <div class="stats-resume" id="stats-resume"></div>
       <div class="bloc">
-        <h2>Suivi des élèves</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:8px;">
+          <h2 style="margin-bottom:0;">Progression par élève</h2>
+          <button class="btn-export" id="btn-export-csv">Exporter en CSV</button>
+        </div>
+        <table id="table-progression">
+          <thead><tr><th>Élève</th><th>Progression</th><th>Terminées</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="bloc">
+        <h2>Détail par activité</h2>
         <table id="table-suivi">
           <thead><tr><th>Élève</th><th>Activité</th><th>Statut</th></tr></thead>
           <tbody></tbody>
@@ -335,7 +390,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, serverTimestamp, query, where
@@ -385,6 +440,7 @@ $('btn-login').addEventListener('click', async () => {
   const email = $('login-email').value.trim();
   const mdp = $('login-mdp').value;
   $('login-erreur').textContent = '';
+  $('login-ok').textContent = '';
   if(!email || !mdp){ $('login-erreur').textContent = "Merci de remplir tous les champs."; return; }
   try{
     await signInWithEmailAndPassword(auth, email, mdp);
@@ -393,7 +449,42 @@ $('btn-login').addEventListener('click', async () => {
   }
 });
 
+$('lien-mdp-oublie').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const email = $('login-email').value.trim();
+  $('login-erreur').textContent = '';
+  $('login-ok').textContent = '';
+  if(!email){ $('login-erreur').textContent = "Écris d'abord ton e-mail ci-dessus, puis clique sur ce lien."; return; }
+  try{
+    await sendPasswordResetEmail(auth, email);
+    $('login-ok').textContent = "E-mail envoyé ! Vérifie ta boîte de réception.";
+  }catch(e){
+    $('login-erreur').textContent = "Impossible d'envoyer l'e-mail. Vérifie l'adresse.";
+  }
+});
+
 $('btn-logout').addEventListener('click', () => signOut(auth));
+
+// ===== CHANGER LE MOT DE PASSE (utilisateur connecté) =====
+$('btn-changer-mdp').addEventListener('click', () => {
+  $('nouveau-mdp').value = ''; $('confirmer-mdp').value = ''; $('mdp-msg').textContent = '';
+  $('modale-mdp').classList.remove('hidden');
+});
+$('btn-annuler-mdp').addEventListener('click', () => $('modale-mdp').classList.add('hidden'));
+$('btn-confirmer-mdp').addEventListener('click', async () => {
+  const n1 = $('nouveau-mdp').value;
+  const n2 = $('confirmer-mdp').value;
+  const msg = $('mdp-msg');
+  msg.textContent = '';
+  if(n1.length < 6){ msg.textContent = "Le mot de passe doit contenir au moins 6 caractères."; return; }
+  if(n1 !== n2){ msg.textContent = "Les mots de passe ne correspondent pas."; return; }
+  try{
+    await updatePassword(auth.currentUser, n1);
+    $('modale-mdp').classList.add('hidden');
+  }catch(e){
+    msg.textContent = "Reconnecte-toi puis réessaie (par sécurité, Firebase exige une connexion récente pour ce changement).";
+  }
+});
 
 onAuthStateChanged(auth, async (user) => {
   if(!user){
@@ -501,7 +592,9 @@ async function chargerEleves(){
   });
 }
 
-// ===== CRÉER UNE ACTIVITÉ =====
+// ===== CRÉER / MODIFIER UNE ACTIVITÉ =====
+let activiteEnEdition = null;
+
 $('btn-creer-activite').addEventListener('click', async () => {
   const titre = $('act-titre').value.trim();
   const niveau = $('act-niveau').value;
@@ -512,14 +605,22 @@ $('btn-creer-activite').addEventListener('click', async () => {
   msg.className = 'msg-erreur';
   if(!titre || !url){ msg.textContent = "Merci d'indiquer un titre et un lien."; return; }
   try{
-    const ref = doc(collection(db, 'activities'));
-    await setDoc(ref, { title: titre, level: niveau, examType: examen, url, createdAt: serverTimestamp() });
-    msg.className = 'msg-ok';
-    msg.textContent = "Activité ajoutée.";
+    if(activiteEnEdition){
+      await setDoc(doc(db, 'activities', activiteEnEdition), { title: titre, level: niveau, examType: examen, url, updatedAt: serverTimestamp() }, { merge: true });
+      msg.className = 'msg-ok';
+      msg.textContent = "Activité modifiée.";
+      activiteEnEdition = null;
+      $('btn-creer-activite').textContent = "Ajouter l'activité";
+    } else {
+      const ref = doc(collection(db, 'activities'));
+      await setDoc(ref, { title: titre, level: niveau, examType: examen, url, createdAt: serverTimestamp() });
+      msg.className = 'msg-ok';
+      msg.textContent = "Activité ajoutée.";
+    }
     $('act-titre').value=''; $('act-url').value='';
     chargerActivitesAdmin();
   }catch(e){
-    msg.textContent = "Erreur lors de l'ajout.";
+    msg.textContent = "Erreur lors de l'enregistrement.";
   }
 });
 
@@ -583,11 +684,15 @@ function afficherTableActivites(){
   );
   filtrees.forEach(a => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td>${libelleExamen(a.examType)}</td><td><button class="btn-mini" data-id="${a.id}">Supprimer</button></td>`;
+    tr.innerHTML = `<td>${a.title}</td><td>${a.level||''}</td><td>${libelleExamen(a.examType)}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn-mini" style="background:var(--teal); margin-right:6px;" data-edit="${a.id}">Modifier</button>
+        <button class="btn-mini" data-id="${a.id}">Supprimer</button>
+      </td>`;
     tbody.appendChild(tr);
   });
   $('activites-vide').classList.toggle('hidden', filtrees.length>0);
-  tbody.querySelectorAll('.btn-mini').forEach(b=>{
+  tbody.querySelectorAll('.btn-mini[data-id]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       if(confirm("Supprimer cette activité ?")){
         await deleteDoc(doc(db,'activities', b.dataset.id));
@@ -595,9 +700,24 @@ function afficherTableActivites(){
       }
     });
   });
+  tbody.querySelectorAll('[data-edit]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const a = activitesCache.find(x=>x.id===b.dataset.edit);
+      if(!a) return;
+      activiteEnEdition = a.id;
+      $('act-titre').value = a.title || '';
+      $('act-niveau').value = a.level || 'A1';
+      $('act-examen').value = a.examType || 'general';
+      $('act-url').value = a.url || '';
+      $('btn-creer-activite').textContent = "Enregistrer les modifications";
+      $('act-titre').scrollIntoView({behavior:'smooth', block:'center'});
+    });
+  });
 }
 
 // ===== SUIVI (admin) =====
+let suiviCache = { eleves:{}, activites:{}, progressParEleve:{} };
+
 async function chargerSuivi(){
   const [usersSnap, actSnap, progSnap] = await Promise.all([
     getDocs(collection(db,'users')),
@@ -612,7 +732,34 @@ async function chargerSuivi(){
     if(!progressParEleve[p.uid]) progressParEleve[p.uid] = {};
     progressParEleve[p.uid][p.activityId] = p.status;
   });
+  suiviCache = { eleves, activites, progressParEleve };
 
+  // --- Cartes de résumé ---
+  const nbEleves = Object.keys(eleves).length;
+  const nbActivites = Object.keys(activites).length;
+  let totalTermines = 0;
+  Object.values(progressParEleve).forEach(m => { totalTermines += Object.values(m).filter(s=>s==='termine').length; });
+  const stats = $('stats-resume');
+  stats.innerHTML = `
+    <div class="stat-carte"><div class="chiffre">${nbEleves}</div><div class="label">Élèves</div></div>
+    <div class="stat-carte"><div class="chiffre">${nbActivites}</div><div class="label">Activités</div></div>
+    <div class="stat-carte"><div class="chiffre">${totalTermines}</div><div class="label">Activités terminées (total)</div></div>
+  `;
+
+  // --- Tableau de progression par élève ---
+  const tbodyProg = document.querySelector('#table-progression tbody');
+  tbodyProg.innerHTML = '';
+  Object.keys(eleves).forEach(uid=>{
+    const faites = activites && nbActivites>0 ? Object.keys(activites).filter(actId => (progressParEleve[uid]||{})[actId]==='termine').length : 0;
+    const pourcentage = nbActivites>0 ? Math.round((faites/nbActivites)*100) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${eleves[uid].displayName}</td>
+      <td style="min-width:160px;"><div class="barre-progres"><div class="barre-progres-remplie" style="width:${pourcentage}%;"></div></div><span style="font-size:0.78rem; color:#8a8f98;">${pourcentage}%</span></td>
+      <td>${faites} / ${nbActivites}</td>`;
+    tbodyProg.appendChild(tr);
+  });
+
+  // --- Détail par activité ---
   const tbody = document.querySelector('#table-suivi tbody');
   tbody.innerHTML = '';
   let n = 0;
@@ -628,6 +775,26 @@ async function chargerSuivi(){
   });
   $('suivi-vide').classList.toggle('hidden', n>0);
 }
+
+$('btn-export-csv').addEventListener('click', () => {
+  const { eleves, activites, progressParEleve } = suiviCache;
+  let csv = "Eleve,Activite,Statut\n";
+  Object.keys(eleves).forEach(uid=>{
+    Object.keys(activites).forEach(actId=>{
+      const statut = (progressParEleve[uid] && progressParEleve[uid][actId]) === 'termine' ? 'Termine' : 'En attente';
+      const nomEleve = (eleves[uid].displayName||'').replace(/,/g,' ');
+      const nomActivite = (activites[actId].title||'').replace(/,/g,' ');
+      csv += `${nomEleve},${nomActivite},${statut}\n`;
+    });
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'suivi-eleves.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
 // ===== ESPACE ÉLÈVE =====
 let activitesEleveCache = [];
