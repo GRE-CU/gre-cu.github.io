@@ -403,6 +403,9 @@
       </div>
       <div class="bloc">
         <h2>Activités existantes</h2>
+        <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
+          <button class="btn-mini" style="background:var(--teal);" id="btn-sync-catalogue">🔄 Synchroniser le catalogue</button>
+        </div>
         <div class="filtres" id="filtres-admin"></div>
         <table id="table-activites">
           <thead><tr><th>Titre</th><th>Niveau</th><th>Catégorie</th><th>Filière</th><th>Accès</th><th></th></tr></thead>
@@ -833,6 +836,36 @@ async function chargerActivitesAdmin(){
   afficherTableActivites();
 }
 
+// Recrée un document "catalogue" (aperçu sans contenu) pour chaque activité existante.
+// Utile pour les activités créées avant la mise en place du catalogue, ou en cas de désync.
+$('btn-sync-catalogue').addEventListener('click', async () => {
+  const btn = $('btn-sync-catalogue');
+  const texteInitial = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Synchronisation…';
+  try{
+    const snap = await getDocs(collection(db, 'activities'));
+    const ecritures = [];
+    snap.forEach(d => {
+      const a = d.data();
+      ecritures.push(setDoc(doc(db, 'catalogue', d.id), {
+        title: a.title || '',
+        level: a.level || '',
+        category: a.category || 'general',
+        examType: a.examType || 'general',
+        access: a.access || 'gratuit',
+        updatedAt: serverTimestamp()
+      }, { merge: true }));
+    });
+    await Promise.all(ecritures);
+    btn.textContent = `✓ ${ecritures.length} activité(s) synchronisée(s)`;
+  }catch(e){
+    console.error(e);
+    btn.textContent = '✗ Erreur — vérifie les règles Firestore';
+  }
+  setTimeout(()=>{ btn.disabled = false; btn.textContent = texteInitial; }, 3500);
+});
+
 function libelleCategorie(v){
   if(v==='grammaire') return 'Grammaire';
   if(v==='vocabulaire') return 'Vocabulaire';
@@ -1054,7 +1087,7 @@ async function chargerActivitesEleve(){
           vues.add(d.id);
         }
       });
-    }catch(e){ /* le catalogue n'est peut-être pas encore configuré côté règles Firestore */ }
+    }catch(e){ console.error('Impossible de charger le catalogue (vérifie les règles Firestore) :', e); }
   }
 
   construireFiltresEleve();
