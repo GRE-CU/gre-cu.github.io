@@ -340,6 +340,7 @@
       </div>
       <div class="bloc">
         <h2>Liste des élèves</h2>
+        <p style="color:var(--coral); font-size:0.85rem; font-weight:600; margin-bottom:10px;" id="eleves-avertissement-doublon"></p>
         <table id="table-eleves">
           <thead><tr><th>Nom</th><th>E-mail</th><th>Accès</th><th></th></tr></thead>
           <tbody></tbody>
@@ -357,6 +358,7 @@
     <div id="acces-act-liste-eleves"></div>
     <div style="display:flex; gap:10px; margin-top:20px;">
       <button class="btn-principal" id="btn-fermer-acces-activite" style="background:transparent; border:1.5px solid var(--line); color:var(--navy);">Fermer</button>
+      <button class="btn-principal" id="btn-nettoyer-acces-activite" style="background:var(--coral);">🧹 Retirer tous les accès</button>
     </div>
     <div class="msg-erreur" id="acces-act-msg"></div>
   </div>
@@ -418,6 +420,7 @@
             <option value="gratuit">Gratuit (visible par tous les élèves)</option>
             <option value="payant">Payant / Premium (accès à autoriser par élève)</option>
           </select>
+          <div id="act-acces-avertissement" style="font-size:0.82rem; margin-top:6px; font-weight:600;"></div>
         </div>
         <div class="champ">
           <label>Fichier de l'activité (.html)</label>
@@ -732,11 +735,14 @@ async function chargerEleves(){
   const tbody = document.querySelector('#table-eleves tbody');
   tbody.innerHTML = '';
   let n = 0;
+  const comptageEmails = {};
   snap.forEach(d => {
     const u = d.data();
     if(u.role !== 'student') return;
     n++;
     elevesCache[d.id] = u;
+    const emailNorm = (u.email||'').toLowerCase().trim();
+    comptageEmails[emailNorm] = (comptageEmails[emailNorm]||0) + 1;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${u.displayName||''}</td><td>${u.email||''}</td>
       <td>${u.accessLevel==='total' ? '<span class="badge-acces badge-gratuit">Total</span>' : '<span class="badge-acces badge-payant">Sélectif</span>'}</td>
@@ -747,6 +753,13 @@ async function chargerEleves(){
     tbody.appendChild(tr);
   });
   $('eleves-vide').classList.toggle('hidden', n>0);
+  const emailsEnDouble = Object.entries(comptageEmails).filter(([,c])=>c>1).map(([e])=>e);
+  const avert = $('eleves-avertissement-doublon');
+  if(avert){
+    avert.textContent = emailsEnDouble.length > 0
+      ? `⚠️ Comptes en double détectés (même e-mail utilisé par plusieurs profils) : ${emailsEnDouble.join(', ')}. Si plusieurs élèves partagent le même compte, ils verront exactement les mêmes autorisations.`
+      : '';
+  }
   tbody.querySelectorAll('[data-uid]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       if(confirm("Retirer l'accès de cet élève à la plateforme ?")){
@@ -887,6 +900,20 @@ $('acces-act-liste-eleves').addEventListener('change', async (e) => {
 
 $('btn-fermer-acces-activite').addEventListener('click', () => $('modale-acces-activite').classList.add('hidden'));
 
+$('btn-nettoyer-acces-activite').addEventListener('click', async () => {
+  if(!activiteEnAudit) return;
+  if(!confirm("Retirer TOUS les élèves autorisés individuellement pour cette activité ? (Les élèves en « Accès total » continueront de la voir.)")) return;
+  try{
+    await setDoc(doc(db,'activities',activiteEnAudit), { autorises: [] }, { merge:true });
+    const a = activitesCache.find(x=>x.id===activiteEnAudit);
+    if(a) a.autorises = [];
+    afficherTableActivites();
+    ouvrirModaleAuditActivite(activiteEnAudit);
+  }catch(err){
+    $('acces-act-msg').textContent = "Erreur lors de la mise à jour.";
+  }
+});
+
 // ===== CRÉER / MODIFIER UNE ACTIVITÉ =====
 let activiteEnEdition = null;
 
@@ -898,6 +925,19 @@ function lireFichierTexte(fichier){
     lecteur.readAsText(fichier, 'UTF-8');
   });
 }
+
+function actualiserAvertissementAcces(){
+  const el = $('act-acces-avertissement');
+  if($('act-acces').value === 'gratuit'){
+    el.style.color = 'var(--coral)';
+    el.textContent = '⚠️ Visible par TOUS les élèves, y compris ceux non autorisés individuellement.';
+  } else {
+    el.style.color = 'var(--teal)';
+    el.textContent = "🔒 Invisible par défaut — utilise le bouton « Payant (N) » dans la liste ci-dessous pour choisir qui y a accès.";
+  }
+}
+$('act-acces').addEventListener('change', actualiserAvertissementAcces);
+actualiserAvertissementAcces();
 
 $('btn-creer-activite').addEventListener('click', async () => {
   const titre = $('act-titre').value.trim();
@@ -1093,6 +1133,7 @@ function afficherTableActivites(){
       $('act-type').value = a.type || 'activite';
       $('act-examen').value = a.examType || 'general';
       $('act-acces').value = a.access || 'gratuit';
+      actualiserAvertissementAcces();
       $('act-fichier').value = '';
       $('act-fichier-info').textContent = "Laisse vide pour garder le fichier actuel, ou choisis-en un nouveau pour le remplacer.";
       $('btn-creer-activite').textContent = "Enregistrer les modifications";
